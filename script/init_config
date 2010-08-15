@@ -1,0 +1,82 @@
+#! /opt/perl/bin/perl
+
+use strict;
+use warnings;
+use 5.010;
+
+use HTTP::Request::Common qw/ POST /;
+use LWP::UserAgent;
+use Term::ReadKey;
+use YAML                  qw/ DumpFile /;
+
+my $email    = prompt_for_email();
+my $password = prompt_for_password();
+
+my $ua = LWP::UserAgent->new( cookie_jar => {} );
+
+my( $uid , $sid ) = login_to_fitbit( $ua , $email , $password );
+my( $user_id    ) = get_user_id_from_fitbit( $ua );
+
+my %config = (
+  uid     => $uid ,
+  sid     => $sid ,
+  user_id => $user_id ,
+);
+DumpFile( "$ENV{HOME}/.fitbit" , \%config );
+say "\n\nWrote config to $ENV{HOME}/.fitbit";
+
+sub login_to_fitbit {
+  my( $browser , $email , $password ) = @_;
+
+  my $response = $browser->post(
+    'https://www.fitbit.com/login' ,
+    Content => {
+      email    => $email ,
+      password => $password ,
+      login    => 'Log In' ,
+    } ,
+  );
+
+  my( $uid , $sid );
+
+  $ua->cookie_jar->scan( sub { 
+    my( undef, $key , $val ) = @_;
+    given( $key ) {
+      when( 'sid' ) { $sid = $val }
+      when( 'uid' ) { $uid = $val }
+    }
+  });
+
+  return( $uid , $sid );
+}
+
+sub get_user_id_from_fitbit {
+  my( $browser ) = @_;
+
+  my $response = $browser->get( 'http://www.fitbit.com/' );
+
+  if( $response->is_success ) {
+    my $content = $response->decoded_content || $response->content;
+    if( $content =~ m|<a href="/user/([^"]+)" | ) { #"
+      return $1;
+    }
+    die "Can't extract user ID";
+  }
+  else { die $response->status_line }
+}
+
+sub prompt_for_email {
+  print "Email associated with your FitBit account? ";
+  chomp( my $email = ReadLine(0));
+  return $email if $email;
+  die "NEED EMAIL!";
+}
+
+sub prompt_for_password {
+  print "FitBit account password? ";
+  ReadMode('noecho');
+  chomp( my $password = ReadLine(0));
+  ReadMode('restore');
+  return $password if $password;
+  die "NEED PASSWORD!";
+}
