@@ -1,4 +1,6 @@
 package WWW::Fitbit::API;
+use Mouse;
+use 5.010;
 
 #
 # Author:       Eric Blue - ericblue76@gmail.com
@@ -6,604 +8,364 @@ package WWW::Fitbit::API;
 # Url:          http://eric-blue.com/projects/fitbit
 #
 
-use strict;
-use warnings;
-
 use Carp;
 use Data::Dumper;
-use Date::Parse;
 use HTTP::Cookies;
-use HTTP::Request;
 use LWP::UserAgent;
 use Log::Log4perl qw(:easy);
 use POSIX;
+use Try::Tiny;
 use XML::Simple;
+use YAML            qw/ LoadFile /;
 
 use vars qw( $VERSION );
 $VERSION = '0.1';
 
-#################################################################
-# Title         : new (public)
-# Usage         : my $fb = WWW::Fitbit::API->new();
-# Purpose       : Constructor
-# Parameters    : user_id (url profile), uid, uis, sid (cookies)
-# Returns       : Blessed class
+has 'base_url' => (
+  is      => 'ro' ,
+  isa     => 'Str' ,
+  default => 'http://www.fitbit.com/graph/getGraphData' ,
+);
 
-sub new {
+has 'sid' => (
+  is       => 'ro' ,
+  isa      => 'Str' ,
+  required => 1 ,
+);
 
-    my $class  = shift;
-    my $self   = {};
-    my %params = @_;
+has 'uid' => (
+  is       => 'ro' ,
+  isa      => 'Str' ,
+  required => 1 ,
+);
 
-    $self->{_ua} = LWP::UserAgent->new();
-    $self->{_ua}->agent("FitBit Perl API/1.0");
+has 'user_id' => (
+  is       => 'ro' ,
+  isa      => 'Str' ,
+  required => 1 ,
+);
 
-    bless $self, $class;
+has '_browser' => (
+  is       => 'ro' ,
+  isa      => 'LWP::UserAgent' ,
+  init_arg => '_set_browser',
+  builder  => '_make_browser' ,
+  handles  => [ 'get' , 'cookie_jar' ] ,
+);
 
-    # Init logger
-    Log::Log4perl->init("conf/logger.conf");
-    $self->{_logger} = get_logger();
-
-    if ( defined $params{config} ) {
-        my $config = $self->_load_fitbit_config( $params{config} );
-        $self->{_uis}     = $config->{'uis'};
-        $self->{_uid}     = $config->{'uid'};
-        $self->{_sid}     = $config->{'sid'};
-        $self->{_user_id} = $config->{'user_id'};
-    }
-    else {
-        my @required_params = qw[uis uid sid user_id];
-        foreach (@required_params) {
-            confess "$_ is a required parameter!"
-              if !defined $params{$_};
-        }
-        $self->{_uis}     = $params{'uis'};
-        $self->{_uid}     = $params{'uid'};
-        $self->{_sid}     = $params{'sid'};
-        $self->{_user_id} = $params{'user_id'};
-    }
-
-    $self->_init_cookies();
-
-    $self;
+sub _make_browser {
+  return LWP::UserAgent->new( agent => "FitBit Perl API/2.0" );
 }
 
-#################################################################
-# Title         : _load_fitbit_config (private)
-# Usage         : $self->_load_fitbit_config($filename)
-# Purpose       : Load config file from disk (Perl variable format)
-# Parameters    : Filename = path to fitbit.conf
-# Returns       : evaled hashref with config values
+has '_logger' => (
+  is       => 'ro',
+  isa      => 'Log::Log4perl::Logger' ,
+  init_arg => undef ,
+  builder  => '_make_logger' ,
+  handles  => [ 'debug' , 'info' ] ,
+);
 
-sub _load_fitbit_config {
-
-    my $self = shift;
-    my ($filename) = @_;
-
-    $/ = "";
-    open( CONFIG, "$filename" ) or confess "Can't open config $filename!";
-    my $config_file = <CONFIG>;
-    close(CONFIG);
-    undef $/;
-
-    my $config = eval($config_file) or confess "Invalid config file format!";
-
-    return $config;
-
+sub _make_logger {
+  Log::Log4perl->init("conf/logger.conf");
+  return get_logger();
 }
 
-#################################################################
-# Title         : total_calories (public)
-# Usage         : $self->total_calories($date)
-# Purpose       : Displays total calories burned and consumed
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : Hash ref; keys = burned, consumed
-#                 values = decimal (calories)
+sub BUILDARGS {
+  my( $class , $args ) = @_;
 
-sub total_calories {
+  my $config_file = $args->{config} || "$ENV{HOME}/.fitbit";
 
-    my $self = shift;
-    my ($date) = @_;
+  die "Can't find config file!"
+    unless -e $config_file;
 
-    #my $total = 0;
-    #$total += $_->{value} foreach ( $self->get_calories_log($date) );
+  my $config = LoadFile( $config_file );
 
-    my @result = $self->_parse_graph_xml( "calorie_historical", $date );
-
-    return $result[0];
-
+  %$args = ( %$config , %$args );
+  return $args;
 }
 
-#################################################################
-# Title         : get_calories_log (public)
-# Usage         : $self->get_calories_log($date)
-# Purpose       : Displays total calories in 5min intervals
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : Hash ref; keys = time, value
-#                 values = YYYY-MM-DD HH:MM[A|P]M, decimal
+sub BUILD {
+  my( $self , $args ) = @_;
 
-sub get_calories_log {
-
-    my $self = shift;
-    my ($date) = @_;
-
-    return $self->_parse_graph_xml( "calorie", $date );
-
+  my $cookie_jar = HTTP::Cookies->new;
+  foreach( qw/ sid uid /) {
+    $cookie_jar->set_cookie(
+      1 , $_ , $self->$_ , '/' , 'www.fitbit.com' ,
+      80 , 0 , 0 , 3600 , 0
+    );
+  }
+  $self->cookie_jar( $cookie_jar );
 }
 
-#################################################################
-# Title         : total_active_score (public)
-# Usage         : $self->total_active_store($date)
-# Purpose       : Displays total active score
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : decimal (score)
+sub activities_breakdown {
+  my( $self , $args ) = @_;
+  $args //= {};
 
-sub total_active_score {
+  # ask for raw so we can get the data out of a different
+  # part of the returned data structure...
+  my $data = $self->fetch_data({
+    type => 'activitiesBreakdown' ,
+    raw  => 1 ,
+    %$args ,
+  });
 
-    my $self = shift;
-    my ($date) = @_;
+  $data = $data->{data}{pie}{slice};
 
-    my @result = $self->_parse_graph_xml( "active_score_historical", $date );
-
-    return $result[0];
-
+  return {
+    sedentary => $data->[0]{content} ,
+    lightly   => $data->[1]{content} ,
+    fairly    => $data->[2]{content} ,
+    very      => $data->[3]{content} ,
+  };
 }
 
-#################################################################
-# Title         : get_active_score_log (public)
-# Usage         : $self->get_active_score_log($date)
-# Purpose       : Displays total active score in 5min intervals
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : Hash ref; keys = time, value
-#                 values = YYYY-MM-DD HH:MM[A|P]M, decimal
+sub build_fitbit_url {
+  my( $self , $args ) = @_;
 
-sub get_active_score_log {
+  $args->{date} //= _get_date();
 
-    my $self = shift;
+  _check_date_format( $args->{date} );
 
-    my ($date) = @_;
+  $self->info("Building URL for type=$args->{type} & date=$args->{date}");
 
-    return $self->_parse_graph_xml( "active_score", $date );
+  my %params = (
+    userId  => $self->user_id,
+    type    => $args->{type}    || 'stepsTaken' ,
+    period  => $args->{period}  || '1d',
+    version => $args->{version} || 'amchart',
+    dateTo  => $args->{date} ,
+  );
 
+  my $query_string = join '&', map { "$_=$params{$_}" } keys %params;
+
+  return $self->base_url . '?' . $query_string;
 }
 
-#################################################################
-# Title         : total_steps (public)
-# Usage         : $self->total_steps($date)
-# Purpose       : Displays total steps
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : decimal (steps)
+sub fetch_data {
+  my( $self , $args ) = @_;
 
-sub total_steps {
+  # TODO Add methods for sleep; need to solve day-boundary problem (see python
+  # code)
 
-    my $self = shift;
-    my ($date) = @_;
+  my $url = $self->build_fitbit_url( $args );
+  $self->debug("URL = $url");
 
-    my @result = $self->_parse_graph_xml( "steps_historical", $date );
+  # Note that user agent also uses cookie jar created on initialization
+  my $response = $self->get($url);
+  unless( $response->is_success ) {
+    $self->info( "HTTP status = ", Dumper( $response->status_line ) );
+    confess "Couldn't get graph data; reason = HTTP status ($response->{_rc})!";
+  }
+  my $xml = $response->content;
+  # Strip leading whitespace for proper parsing
+  $xml =~ s/^\s+//gm;
+  $self->debug("XML = $xml");
 
-    return $result[0];
+  return $xml if $args->{raw_xml};
 
+  my $graph_data;
+  try {
+    $graph_data = XMLin( $xml, KeyAttr => [] , ForceArray => [ 'graph' ] );
+  }
+  catch { confess "$$: XMLin() died: $_\n" };
+
+  return $graph_data if $args->{raw};
+
+  return $graph_data->{data}{chart}{graphs}{graph};
 }
 
-#################################################################
-# Title         : get_step_log (public)
-# Usage         : $self->get_step_log($date)
-# Purpose       : Displays total steps in 5min intervals
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : Hash ref; keys = time, value
-#                 values = YYYY-MM-DD HH:MM[A|P]M, decimal
+sub intraday_active_score {
+  my( $self , $args ) = @_;
+  $args //= {};
 
-sub get_step_log {
+  my $data = $self->fetch_data({
+    type => 'intradayActiveScore' ,
+    %$args ,
+  });
 
-    my $self = shift;
-
-    my ($date) = @_;
-
-    return $self->_parse_graph_xml( "steps", $date );
-
+  return _convert_intraday_log( $data );
 }
 
-#################################################################
-# Title         : get_sleep_log (public)
-# Usage         : $self->get_sleep_log($date)
-# Purpose       : Displays total sleep in 1min intervals
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : Hash ref; keys = time, value
-#                 values = YYYY-MM-DD HH:MM[A|P]M, decimal
+sub intraday_calories_burned {
+  my( $self , $args ) = @_;
+  $args //= {};
 
-sub get_sleep_log {
+  my $data = $self->fetch_data({
+    type => 'intradayCaloriesBurned' ,
+    %$args ,
+  });
 
-    my $self = shift;
-
-    my ($date) = @_;
-
-    return $self->_parse_graph_xml( "sleep", $date );
-
+  return _convert_intraday_log( $data );
 }
 
-#################################################################
-# Title         : total_distance (public)
-# Usage         : $self->total_distance($date)
-# Purpose       : Displays total distance travel in miles
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : float (miles)
+sub intraday_sleep {
+  my( $self , $args ) = @_;
+  $args //= {};
 
-sub total_distance {
-
-    my $self = shift;
-    my ($date) = @_;
-
-    my @result = $self->_parse_graph_xml( "distance_historical", $date );
-
-    return $result[0];
-
+  my $data = $self->fetch_data({
+    type => 'intradaySleep' ,
+    raw => 1 ,
+    %$args ,
+  });
+  die "NOT DONE YET"
 }
 
-#################################################################
-# Title         : total_active_hours (public)
-# Usage         : $self->total_active_hours($date)
-# Purpose       : Displays total activity breakdown
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : Hash ref; keys = very, fairly, lightly
-#                 values = hours as floats (e.g. 3.0)
+sub intraday_steps {
+  my( $self , $args ) = @_;
+  $args //= {};
 
-sub total_active_hours {
+  my $data = $self->fetch_data({
+    type => 'intradaySteps' ,
+    %$args ,
+  });
 
-    my $self = shift;
-    my ($date) = @_;
-
-    my @result = $self->_parse_graph_xml( "active_hours_historical", $date );
-
-    return $result[0];
-
+  return _convert_intraday_log( $data );
 }
 
-#################################################################
-# Title         : total_active_score (public)
-# Usage         : $self->total_active_store($date)
-# Purpose       : Displays total active score
-# Parameters    : date = YYYY-MM-DD (optional; default = today)
-# Returns       : decimal (score)
+sub minutes_active {
+  my( $self , $args ) = @_;
+  $args //= {};
 
-sub total_sleep_time {
+  my $data = $self->fetch_data({
+    type => 'minutesActive' ,
+    %$args ,
+  });
 
-    my $self = shift;
-    my ($date) = @_;
+  return {
+    lightly => $data->[0]{value}{content},
+    fairly  => $data->[1]{value}{content},
+    very    => $data->[2]{value}{content},
+  };
+}
 
-    my @r1 = $self->_parse_graph_xml( "sleep_time_historical", $date );
-    my $hours_asleep = $r1[0];
+sub active_score {
+  my( $self , $args ) = @_;
+  $args //= {};
 
-    my @r2 = $self->_parse_graph_xml( "wakeup_historical", $date );
-    my $wakes = $r2[0];
+  my $data = $self->fetch_data({
+    type => 'activeScore',
+    %$args ,
+  });
 
-    my $result = { hours_asleep => $hours_asleep, wakes => $wakes };
+  return $data->[0]{value}{content};
+}
 
-    return $result;
+sub calories_in_out {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->fetch_data({
+    type => 'caloriesInOut' ,
+    %$args ,
+  });
+
+  return {
+    burned   => $data->[0]{value}{content} ,
+    consumed => $data->[1]{value}{content} ,
+  };
 
 }
 
-#################################################################
-# Title         : _check_date_format (private)
-# Usage         : $self->_check_date_format($date)
-# Purpose       : Verify valid date format is supplied
-# Parameters    : date
-# Returns       : 1 (true) ; confess on error
+sub distance_from_steps {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->fetch_data({
+    type => 'distanceFromSteps' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content};
+}
+
+sub steps_taken {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->fetch_data({
+    type => 'stepsTaken' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content};
+}
+
+sub time_asleep {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->fetch_data({
+    type => 'timeAsleep' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content} ,
+}
+
+sub times_woken_up {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->fetch_data({
+    type => 'timesWokenUp' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content},
+}
+
+sub weight {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->fetch_data({
+    type => 'weight' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}[0]{content};
+}
 
 sub _check_date_format {
+  my( $date ) = @_;
 
-    my $self = shift;
-    my ($date) = @_;
+  # Very basic regex to check date format
+  if ( $date !~ /^(\d{4})-(\d{2})-(\d{2})$/ ) {
+    confess "Invalid date format [$date].  Expected (YYYY-MM-DD)";
+  }
 
-    # Very basic regex to check date format
-    if ( $date !~ /(\d{4})-(\d{2})-(\d{2})/ ) {
-        confess "Invalid date format [$date].  Expected (YYYY-MM-DD)";
-    }
-
-    return 1;
+  return 1;
 }
 
-#################################################################
-# Title         : _get_date (private)
-# Usage         : $self->_get_date()
-# Purpose       : Returns default date for methods where date
-#                 parameter is not supplied; Defaults to today
-# Parameters    : n/a
-# Returns       : Date string (format = YYYY-MM-DD)
+sub _convert_intraday_log {
+  my( $data ) = @_;
+
+  my @list = @{ $data->[0]{value} };
+  pop @list; # get rid of the empty last element...
+
+  my @return;
+
+  foreach( @list ) {
+    ### FIXME interval size should be set via param
+    my $time      = $_->{xid} * 5;
+    my $hours     = int( $time / 60 );
+    my $minutes   = $time % 60;
+    my $timestamp = sprintf "%02d:%02d" , $hours , $minutes;
+
+    push @return , { $timestamp => $_->{content} }
+  }
+
+  return @return;
+}
 
 sub _get_date {
-
-    my $self = shift;
-
-    # Default to today's date
-    my $date = strftime( "%F", localtime );
-
-    return $date;
-
-}
-
-#################################################################
-# Title         : _init_cookies (private)
-# Usage         : $self->_init_cookies()
-# Purpose       : Initializes cookis for required sid, uid, & uis
-# Parameters    : url = base fitbit URL + graph-specific query
-# Returns       : 1 (true)
-
-sub _init_cookies {
-
-    my $self = shift;
-
-    my $cookie_jar = HTTP::Cookies->new;
-    $cookie_jar->set_cookie( 1, 'sid', $self->{_sid}, '/', 'www.fitbit.com', 80,
-        0, 0, 3600, 0 );
-    $cookie_jar->set_cookie( 1, 'uid', $self->{_uid}, '/', 'www.fitbit.com', 80,
-        0, 0, 3600, 0 );
-    $cookie_jar->set_cookie( 1, 'uis', $self->{_uis}, '/', 'www.fitbit.com', 80,
-        0, 0, 3600, 0 );
-    $self->{_ua}->cookie_jar($cookie_jar);
-
-    return 1;
-
-}
-
-#################################################################
-# Title         : _request_http (private)
-# Usage         : $self->_request_http($url)
-# Purpose       : Performs HTTP GET on requested URL
-# Parameters    : url = base fitbit URL + graph-specific query
-# Returns       : HTTP response content (XML)
-
-sub _request_http {
-
-    my ( $self, $url ) = @_;
-
-    $self->{_logger}->debug("URL = $url");
-
-    # Note that user agent also uses cookie jar created on initialization
-    my $request = HTTP::Request->new('GET', $url);
-    my $response = $self->{_ua}->request($request);
-
-    if ( !$response->is_success ) {
-        $self->{_logger}
-          ->info( "HTTP status = ", Dumper( $response->status_line ) );
-        confess "Couldn't get graph data; reason = HTTP status ($response->{_rc})!";
-    }
-
-    return $response->content;
-
-}
-
-#################################################################
-# Title         : _request_graph_xml (private)
-# Usage         : $self->_request_graph_xml($graph_type, $date)
-# Purpose       : Build URL based on graph type and fetch XML
-# Parameters    : graph_type = [see $type_map for valid values]
-#                 date = YYYY-MM-DD
-# Returns       : XML string
-
-sub _request_graph_xml {
-
-    my $self = shift;
-    my ( $graph_type, $date ) = @_;
-
-    my $type_map = {
-
-        # intraday data in 5 min intervals
-        'active_score' => 'intradayActiveScore',
-        'calorie'      => 'intradayCaloriesBurned',
-        'sleep'        => 'intradaySleep',
-        'steps'        => 'intradaySteps',
-
-        # historical data with aggregate info
-        'active_hours_historical' => 'minutesActive',
-        'active_score_historical' => 'activeScore',
-        'calorie_historical'      => 'caloriesInOut',
-        'distance_historical'     => 'distanceFromSteps',
-        'steps_historical'        => 'stepsTaken',
-        'sleep_time_historical'   => 'timeAsleep',
-        'wakeup_historical'       => 'timesWokenUp'
-    };
-
-    if ( !defined $type_map->{$graph_type} ) {
-        confess "$graph_type is not a valid graph type!";
-    }
-
-    # TODO Add methods for sleep; need to solve day-boundary problem (see python code)
-
-    # TODO Add second parameter (duration in days) to fetch multiple days worth of data
-    # in a single request (avoiding multiple HTTP Requests).  This would change duration
-    # from 1d to 1m
-
-    # TODO Add support for getting weight info
-
-    my $base_params = {
-        userId      => $self->{_user_id},
-        type        => $type_map->{$graph_type},
-        period      => "1d",
-        dataVersion => "2108",
-        version     => "amchart",
-        chart_type  => "column2d",
-        dateTo      => $date
-    };
-
-    my $query_string = join '&',
-      map { "$_=$base_params->{$_}" } keys %{$base_params};
-
-    my $base_graph_url = "http://www.fitbit.com/graph/getGraphData";
-
-    my $url = "$base_graph_url" . "?" . $query_string;
-    my $xml = $self->_request_http($url);
-
-    # Strip leading whitespace for proper parsing
-    $xml =~ s/^\s+//gm;
-
-    $self->{_logger}->debug("XML = $xml");
-
-    return $xml;
-
-}
-
-#################################################################
-# Title         : _parse_graph_xml (private)
-# Usage         : $self->_parse_graph_xml($graph_type, $date)
-# Purpose       : Parses graph XML using XMLIn
-# Parameters    : graph_type = [see $type_map for valid values]
-#                 date = YYYY-MM-DD
-# Returns       : XML string
-
-sub _parse_graph_xml {
-
-    my $self = shift;
-    my ( $graph_type, $date ) = @_;
-
-    defined $date ? $self->_check_date_format($date) : $date =
-      $self->_get_date();
-    $self->{_logger}->info("Getting calories burned for date $date");
-
-    my $xml = $self->_request_graph_xml( $graph_type, $date );
-    my $graph_data;
-
-    eval { $graph_data = XMLin( $xml, keyattr => [] ); };
-    if ($@) {
-        confess "$$: XMLin() died: $@\n";
-    }
-
-    my @entries;
-
-    # Parsing for similar intraday graph types; treat values an array
-    if ( grep( /^$graph_type$/, qw[calorie activescore steps] ) ) {
-
-        foreach ( @{ $graph_data->{data}{chart}{graphs}{graph}{value} } ) {
-            next if !defined $_->{description};
-
-            # Sample description: "7 calories burned from 9:40pm to 9:45pm"
-            my @v = split / /, $_->{description};
-            my $log_time =
-              strftime( "%I:%M%p", localtime( str2time( $v[4] ) ) );
-            push( @entries,
-                { time => "$date $log_time", value => $_->{content} } );
-        }
-    }
-
-    # Parsing for sleep; unlike other intraday logs this crosses 24-hour day boundaries
-    # TODO Populate date after we figure out whether sleep record crosses a day boundary
-
-    if ( $graph_type eq "sleep" ) {
-
-        foreach ( @{ $graph_data->{data}{chart}{graphs}{graph}{value} } ) {
-            next if !defined $_->{description};
-
-            # Sample description: "awake at 11:12pm"
-            my @v = split / /, $_->{description};
-
-            # 'awake' or 'asleep'
-            my $sleep_status = $v[0];
-            my $log_time =
-              strftime( "%I:%M%p", localtime( str2time( $v[2] ) ) );
-
-            # Note: $log_time is only the timestamp right now and doesn't yet include date
-            push( @entries, { time => "$log_time", value => $sleep_status } );
-        }
-
-    }
-
-    # Parsing for historical graphs: each graph type serializes slightly different
-    if ( $graph_type =~ /_historical/ ) {
-        if ( $graph_type eq "calorie_historical" ) {
-
-            # Sample description: "2690 calories burned on Sat, May 1"
-            my @v1 = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}[0]{value}{description};
-            my $calories_burned = $v1[0];
-
-            # Sample description: "2102 calories eaten on Sat, May 1"
-            my @v2 = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}[1]{value}{description};
-            my $calories_consumed = $v2[0];
-
-            push( @entries,
-                { burned => $calories_burned, consumed => $calories_consumed }
-            );
-        }
-        if ( $graph_type eq "active_score_historical" ) {
-
-            # Sample description: "598 on Sat, May 1"
-            my @v = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}{value}{description};
-            my $total_score = $v[0];
-            push( @entries, $total_score );
-        }
-        if ( $graph_type eq "sleep_time_historical" ) {
-
-            # Sample description: "7.37 hours asleep on Sat, May 1"
-            my @v = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}{value}{description};
-            my $total_sleep = $v[0];
-            push( @entries, $total_sleep );
-
-        }
-        if ( $graph_type eq "wakeup_historical" ) {
-
-            # Sample description: "awoke 6 times on Sat, May 1"
-            my @v = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}{value}{description};
-            my $total_wakes = $v[1];
-            push( @entries, $total_wakes );
-
-        }
-        if ( $graph_type eq "steps_historical" ) {
-
-            # Sample description: "11,232 steps on Sat, May 1"
-            my @v = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}{value}{description};
-            my $total_steps = $v[0];
-            push( @entries, $total_steps );
-        }
-        if ( $graph_type eq "distance_historical" ) {
-
-            # Sample description: "4.32 miles travelled on Sat, May 1"
-            my @v = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}{value}{description};
-            my $total_distance = $v[0];
-            push( @entries, $total_distance );
-        }
-        if ( $graph_type eq "active_hours_historical" ) {
-
-            # Sample description: ".9 hours lightly active on Sat, May 1"
-            my @v1 = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}[0]{value}{description};
-            my $lightly_active = $v1[0];
-
-            # Sample description: "1.23 hours fairly active on Sat, May 1"
-            my @v2 = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}[1]{value}{description};
-            my $fairly_active = $v2[0];
-
-            # Sample description: "1.5 hours very active on Sat, May 1"
-            my @v3 = split / /,
-              $graph_data->{data}{chart}{graphs}{graph}[2]{value}{description};
-            my $very_active = $v3[0];
-
-            push(
-                @entries,
-                {
-                    lightly => $lightly_active,
-                    fairly  => $fairly_active,
-                    very    => $very_active
-                }
-            );
-
-        }
-
-    }
-
-    return @entries;
-
+  # Default to today's date
+  return strftime( "%F", localtime );
 }
 
 1;
 
 __END__
-
 
 =head1 NAME
 
