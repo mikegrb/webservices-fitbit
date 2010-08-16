@@ -13,6 +13,7 @@ requires 'HTTP::Cookies';
 requires 'HTTP::Request';
 requires 'LWP::UserAgent';
 requires 'Log::Log4perl';
+requires 'Moose';
 requires 'POSIX';
 requires 'XML::Simple';
 
