@@ -8,14 +8,18 @@ all_from 'lib/WWW/Fitbit/API.pm';
 requires 'Carp';
 
 requires 'Data::Dumper';
-requires 'Date::Parse';
+requires 'File::Slurp';
 requires 'HTTP::Cookies';
 requires 'HTTP::Request';
 requires 'LWP::UserAgent';
 requires 'Log::Log4perl';
-requires 'Moose';
+requires 'Mouse';
 requires 'POSIX';
+requires 'Try::Tiny';
 requires 'XML::Simple';
+requires 'YAML';
+
+test_requires 'Test::MockObject::Extends';
 
 install_script glob('script/*.pl');
 auto_install;
