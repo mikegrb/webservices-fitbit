@@ -12,7 +12,7 @@ use warnings;
 use WWW::Fitbit::API;
 use POSIX;
 
-my $fb = WWW::Fitbit::API->new( config => 'conf/fitbit.conf' );
+my $fb = WWW::Fitbit::API->new();
 
 my $day        = 86400;    # 1 day
 my $total_days = 7;
@@ -30,20 +30,21 @@ for ( my $i = 0 ; $i < $total_days ; $i++ ) {
     print "Getting data for $previous_day ...\n";
 
     print TOTALS_CSV $previous_day . ",";
-    print TOTALS_CSV $fb->total_calories($previous_day)->{burned} . ",";
-    print TOTALS_CSV $fb->total_calories($previous_day)->{consumed} . ",";
-    print TOTALS_CSV $fb->total_active_score($previous_day) . ",";
-    print TOTALS_CSV $fb->total_steps($previous_day) . ",";
-    print TOTALS_CSV $fb->total_distance($previous_day) . ",";
+    print TOTALS_CSV $fb->calories_in_out({ date => $previous_day })->{burned} . ",";
+    print TOTALS_CSV $fb->calories_in_out({ date => $previous_day })->{consumed} . ",";
+    print TOTALS_CSV $fb->active_score({ date => $previous_day }) . ",";
+    print TOTALS_CSV $fb->steps_taken({ date => $previous_day }) . ",";
+    print TOTALS_CSV $fb->distance_from_steps({ date => $previous_day }) . ",";
 
-    my $ah = $fb->total_active_hours($previous_day);
+    my $ah = $fb->minutes_active({ date => $previous_day });
     print TOTALS_CSV $ah->{very} . ",";
     print TOTALS_CSV $ah->{fairly} . ",";
     print TOTALS_CSV $ah->{lightly} . ",";
 
-    my $st = $fb->total_sleep_time($previous_day);
-    print TOTALS_CSV $st->{hours_asleep} . ",";
-    print TOTALS_CSV $st->{wakes} . "\n";
+    print TOTALS_CSV $fb->time_asleep({ date => $previous_day }) .',';
+    print TOTALS_CSV $fb->times_woken_up({ date => $previous_day });
+
+    print TOTALS_CSV "\n";
 
     $day += 86400;
 
