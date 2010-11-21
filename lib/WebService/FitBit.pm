@@ -1,6 +1,7 @@
 package WebService::FitBit;
 # ABSTRACT: OO Perl API used to fetch fitness data from fitbit.com
-use Mouse;
+use Moose;
+
 use strictures 1;
 use strict;
 use 5.010;
