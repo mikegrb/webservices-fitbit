@@ -1,16 +1,74 @@
 package WebService::FitBit;
 # ABSTRACT: OO Perl API used to fetch fitness data from fitbit.com
+
+=head1 SYNOPSIS
+
+    use WebService::FitBit;
+
+    # pulls default config from ~/.fitbit -- init that first, with
+    # 'initialize_fitbit_config_file' command
+    my $fb = WebService::FitBit->new();
+
+    # No date defaults to today
+### FIXME update method names
+    my @log = $fb->get_calories_log();
+    foreach (@log) {
+        print "time = $_->{time} : calories = $_->{value}\n";
+    }
+
+### FIXME update method names
+    printf "calories    = %s\n" , $fb->total_calories('2010-05-03');
+    printf "activescore = %s\n" , $fb->total_active_score('2010-05-03');
+    printf "steps       = %s\n" , $fb->total_steps('2010-05-03');
+
+=head1 DESCRIPTION
+
+C<WebService::FitBit> provides an OO API for fetching fitness data from
+fitbit.com.  Currently there is no official published
+API. C<WebService::FitBit> works by accssing the XML feeds that drive the
+Flash/JavaScript-based interface at fibit.com. That means that changes to the
+location of format of those XML feeds could produce errors -- caveat user.
+
+Intraday (5min and 1min intervals) logs are provided for:
+
+ - calories burned
+ - activity score
+ - steps taken
+ - sleep activity (every 1 min)
+
+Historical (aggregate) info is provided for:
+
+ - calories burned / consumed
+ - activity score
+ - steps taken
+ - distance travels (miles)
+ - sleep (total time in hours, and times awoken)
+
+=head1 KNOWN_ISSUES
+
+At this time, if you attempt to tally the intraday (5min) logs for
+the total daily number, this number will NOT match the number from
+the total_*_ API call.  This is due to the way that FitBit feeds the
+intraday values via XML to the flash-graph chart.  All numbers are
+whole numbers, and this rounding issue causes the detailed log
+tally to be between 10-100 points higher.
+
+For example:
+
+    # Calling total = 2122
+    print "Total calories burned = " . $fb->total_calories()->{burned} . "\n";
+
+    # Tallying total from log entries = 2157
+    my $total = 0;
+    $total += $_->{value} foreach ( $fb->get_calories_log($date) );
+
+=cut
+
 use Moose;
 
 use strictures 1;
 use strict;
 use 5.010;
-
-#
-# Author:       Eric Blue - ericblue76@gmail.com
-# Project:      Perl Fitbit API
-# Url:          http://eric-blue.com/projects/fitbit
-#
 
 use Carp;
 use HTTP::Cookies;
@@ -52,6 +110,32 @@ has '_browser' => (
   handles  => [ 'get' , 'cookie_jar' ] ,
 );
 
+=method new
+
+    my $fb = WebService::FitBit->new();
+    my $fb = WebService::FitBit->new({ config => 'alternate/file/location' });
+    my $fb = WebService::FitBit->new({
+      sid     => $sid ,
+      uid     => $uid ,
+      user_id => $user_id ,
+    });
+
+Returns a WebService::FitBit object. Generally you'll want to use the default
+form, which pulls required parameters out of $ENV{HOME}/.fitbit. There is a
+helper command included in the dist -- C<initialize_fitbit_config_file> --
+which will prompt for an account name and password and then use those to
+retrieve the required values from L<http://fitbit.com>
+
+If you prefer, you can specify an alternate config file location with the
+'config' parameter, or specify the required 'sid', 'uid', and 'user_id' values
+directly.
+
+If 'sid', 'uid', or 'user_id' parameters are supplied, they will override any
+parameters read from the config.
+
+=for Pod::Coverage BUILD
+
+=cut
 
 sub BUILDARGS {
   my( $class , $args ) = @_;
@@ -85,13 +169,50 @@ sub BUILD {
   $self->cookie_jar( $cookie_jar );
 }
 
+=method active_score
+
+    $score = $fb->active_score();
+    $score = $fb->active_score('2010-10-20');
+
+Returns the active score for a given date. Defaults to current date if none
+given.
+
+=cut
+
+sub active_score {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'activeScore',
+    %$args ,
+  });
+
+  return $data->[0]{value}{content};
+}
+
+=method activities_breakdown
+
+    my $activities_breakdown_hash = $fb->activities_breakdown();
+    my $activities_breakdown_hash = $fb->activities_breakdown('2010-10-20');
+
+Returns a hashref summarizing what percentage of the given date was spent in
+each of four activity level categories: 'sedentary', 'lightly', 'fairly', and
+'very'. If no date is given, defaults to the current date.
+
+NOTE: The four values in the hash will sum to (approximately) 100, not 1. That
+is, if half of the date was in the 'sedentary' level, the 'sedentary' key in
+the hashref would have a value of '50'.
+
+=cut
+
 sub activities_breakdown {
   my( $self , $args ) = @_;
   $args //= {};
 
   # ask for raw so we can get the data out of a different
   # part of the returned data structure...
-  my $data = $self->fetch_data({
+  my $data = $self->_fetch_data({
     type => 'activitiesBreakdown' ,
     raw  => 1 ,
     %$args ,
@@ -107,7 +228,303 @@ sub activities_breakdown {
   };
 }
 
-sub build_fitbit_url {
+=method calories_in_out
+
+    $calories_in_out_hashref = $fb->calories_in_out();
+    $calories_in_out_hashref = $fb->calories_in_out('2010-10-20');
+
+Returns a hashref with information about calories burned and consumed on the
+given day. Calories burned are under the 'burned' key; calories consumed are
+under the 'consumed' key.
+
+=cut
+
+sub calories_in_out {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'caloriesInOut' ,
+    %$args ,
+  });
+
+  return {
+    burned   => $data->[0]{value}{content} ,
+    consumed => $data->[1]{value}{content} ,
+  };
+
+}
+
+=method distance_from_steps
+
+    $distance_in_miles = $fb->distance_from_steps();
+    $distance_in_miles = $fb->distance_from_steps('2010-10-20');
+
+Returns the distance walked on the given date, in miles. Defaults to the
+current date, if none given.
+
+=cut
+
+sub distance_from_steps {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'distanceFromSteps' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content};
+}
+
+=method intraday_active_score
+
+  @intraday_active_scores = $fb->intraday_active_score();
+  @intraday_active_scores = $fb->intraday_active_score('2010-10-20');
+
+Returns a list of hashrefs, each of the form C<( time => value )>. Times are
+in five minute intervals, running from '00:00' to '23:55'. Values are the
+activity score for that particular interval of the day.
+
+Note that when requesting data for the current day, you still get the full
+range of time values, even though some of them haven't occurred yet.
+
+Takes a date argument; defaults to the current date if none is given.
+
+=cut
+
+sub intraday_active_score {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'intradayActiveScore' ,
+    %$args ,
+  });
+
+  return _convert_intraday_log( $data );
+}
+
+=method intraday_calories_burned
+
+  @intraday_calories_burned = $fb->intraday_calories_burned();
+  @intraday_calories_burned = $fb->intraday_calories_burned('2010-10-20');
+
+Returns a list of hashrefs, each of the form C<( time => value )>. Times are
+in five minute intervals, running from '00:00' to '23:55'. Values are the
+calories burned during that particular interval of the day.
+
+Note that when requesting data for the current day, you still get the full
+range of time values, even though some of them haven't occurred yet.
+
+Takes a date argument; defaults to the current date if none is given.
+
+=cut
+
+sub intraday_calories_burned {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'intradayCaloriesBurned' ,
+    %$args ,
+  });
+
+  return _convert_intraday_log( $data );
+}
+
+=method intraday_sleep
+
+NOT YET IMPLEMENTED. Patches welcomed.
+
+=cut
+
+sub intraday_sleep {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'intradaySleep' ,
+    raw => 1 ,
+    %$args ,
+  });
+  die "NOT DONE YET"
+}
+
+=method intraday_steps
+
+  @intraday_steps = $fb->intraday_steps();
+  @intraday_steps = $fb->intraday_steps('2010-10-20');
+
+Returns a list of hashrefs, each of the form C<( time => value )>. Times are
+in five minute intervals, running from '00:00' to '23:55'. Values are the
+number of steps taken during that particular interval of the day.
+
+Note that when requesting data for the current day, you still get the full
+range of time values, even though some of them haven't occurred yet.
+
+Takes a date argument; defaults to the current date if none is given.
+
+=cut
+
+sub intraday_steps {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'intradaySteps' ,
+    %$args ,
+  });
+
+  return _convert_intraday_log( $data );
+}
+
+=method minutes_active
+
+    $minutes_active_hashref = $fb->minutes_active();
+    $minutes_active_hashref = $fb->minutes_active('2010-10-20');
+
+Returns a hashref containing information about the time spent in the
+'lightly', 'fairly', and 'very' activity levels for the given date. Defaults
+to the current date if none given.
+
+Values are expressed in fractional hours. I.e., if the 'very' key has a value
+of '0.50', that indicates that 30 minutes were spent in that activity level.
+
+=cut
+
+sub minutes_active {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'minutesActive' ,
+    %$args ,
+  });
+
+  return {
+    lightly => $data->[0]{value}{content},
+    fairly  => $data->[1]{value}{content},
+    very    => $data->[2]{value}{content},
+  };
+}
+
+=method steps_taken
+
+    $steps_taken = $fb->steps_taken();
+    $steps_taken = $fb->steps_taken('2010-10-20');
+
+Returns the number of steps taken on the given date. Defaults to the current
+date if none given.
+
+=cut
+
+sub steps_taken {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'stepsTaken' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content};
+}
+
+=method time_asleep
+
+    $hours_asleep = $fb->time_asleep();
+    $hours_asleep = $fb->time_asleep('2010-10-20');
+
+Returns the amount of time spent asleep on the given day. Defaults to the
+current date if none given.
+
+The value is expressed in fractional hours. I.e., a value of 7.5 indicates 7
+hours and 30 minutes spent asleep.
+
+TODO Currently unclear if this value is the sum of all sleeps on a given day
+or just the value from the first or the value from the longest.
+
+=cut
+
+sub time_asleep {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'timeAsleep' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content} ,
+}
+
+=method times_woken_up
+
+    $times_woken_up = $fb->times_woken_up();
+    $times_woken_up = $fb->times_woken_up('2010-10-20');
+
+Returns the number of times woken up on the given day. Defaults to the current
+date if none given.
+
+TODO Currently unclear if this value is the sum of all sleeps on a given day
+or just the value from the first or the value from the longest.
+
+=cut
+
+sub times_woken_up {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'timesWokenUp' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}{content},
+}
+
+=method weight
+
+    $weight = $fb->weight();
+    $weight = $fb->weight('2010-10-20');
+
+Returns the weight value for a given date, or the current date if none is given.
+
+Note that the value returned for a day where no explict value was entered is
+an interpolation done on the FitBit server side. Currently there is no way to
+retrieve only the data that was explictly entered.
+
+=cut
+
+sub weight {
+  my( $self , $args ) = @_;
+  $args //= {};
+
+  my $data = $self->_fetch_data({
+    type => 'weight' ,
+    %$args ,
+  });
+
+  return $data->[0]{value}[0]{content};
+}
+
+# INTERNAL METHODS
+
+## _build_fitbit_url
+
+# takes a hashref of arguments and uses them to construct a URL to fetch a
+# given dataset from the fitbit servers.
+
+# accetpable keys:
+#   - type    -- type of data to fetch
+#   - period  -- amount of data to fetch. defaults to 1 day
+#   - version -- not completely clear what this param does. defaults to 'amchart'
+#   - date    -- date of data to fetch. default to current day (via _get_date()) if not given.
+
+# returns the URL to fetch.
+
+sub _build_fitbit_url {
   my( $self , $args ) = @_;
 
   $args->{date} //= _get_date();
@@ -127,187 +544,12 @@ sub build_fitbit_url {
   return $self->base_url . '?' . $query_string;
 }
 
-sub fetch_data {
-  my( $self , $args ) = @_;
+## _check_date_format
 
-  # TODO Add methods for sleep; need to solve day-boundary problem (see python
-  # code)
+# verifies that a date is in the proper 'YYYY-MM-DD' format.
 
-  my $url = $self->build_fitbit_url( $args );
-
-  # Note that user agent also uses cookie jar created on initialization
-  my $response = $self->get($url);
-  unless( $response->is_success ) {
-    confess "Couldn't get graph data; reason = HTTP status ($response->{_rc})!";
-  }
-  my $xml = $response->content;
-  # Strip leading whitespace for proper parsing
-  $xml =~ s/^\s+//gm;
-
-  return $xml if $args->{raw_xml};
-
-  my $graph_data;
-  try {
-    $graph_data = XMLin( $xml, KeyAttr => [] , ForceArray => [ 'graph' ] );
-  }
-  catch { confess "$$: XMLin() died: $_\n" };
-
-  return $graph_data if $args->{raw};
-
-  return $graph_data->{data}{chart}{graphs}{graph};
-}
-
-sub intraday_active_score {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'intradayActiveScore' ,
-    %$args ,
-  });
-
-  return _convert_intraday_log( $data );
-}
-
-sub intraday_calories_burned {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'intradayCaloriesBurned' ,
-    %$args ,
-  });
-
-  return _convert_intraday_log( $data );
-}
-
-sub intraday_sleep {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'intradaySleep' ,
-    raw => 1 ,
-    %$args ,
-  });
-  die "NOT DONE YET"
-}
-
-sub intraday_steps {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'intradaySteps' ,
-    %$args ,
-  });
-
-  return _convert_intraday_log( $data );
-}
-
-sub minutes_active {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'minutesActive' ,
-    %$args ,
-  });
-
-  return {
-    lightly => $data->[0]{value}{content},
-    fairly  => $data->[1]{value}{content},
-    very    => $data->[2]{value}{content},
-  };
-}
-
-sub active_score {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'activeScore',
-    %$args ,
-  });
-
-  return $data->[0]{value}{content};
-}
-
-sub calories_in_out {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'caloriesInOut' ,
-    %$args ,
-  });
-
-  return {
-    burned   => $data->[0]{value}{content} ,
-    consumed => $data->[1]{value}{content} ,
-  };
-
-}
-
-sub distance_from_steps {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'distanceFromSteps' ,
-    %$args ,
-  });
-
-  return $data->[0]{value}{content};
-}
-
-sub steps_taken {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'stepsTaken' ,
-    %$args ,
-  });
-
-  return $data->[0]{value}{content};
-}
-
-sub time_asleep {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'timeAsleep' ,
-    %$args ,
-  });
-
-  return $data->[0]{value}{content} ,
-}
-
-sub times_woken_up {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'timesWokenUp' ,
-    %$args ,
-  });
-
-  return $data->[0]{value}{content},
-}
-
-sub weight {
-  my( $self , $args ) = @_;
-  $args //= {};
-
-  my $data = $self->fetch_data({
-    type => 'weight' ,
-    %$args ,
-  });
-
-  return $data->[0]{value}[0]{content};
-}
+# FIXME: actually, all it currently does is check that there are digits in
+# those slots -- '0000-99-99' is an acceptable date by this algorithm.
 
 sub _check_date_format {
   my( $date ) = @_;
@@ -319,6 +561,11 @@ sub _check_date_format {
 
   return 1;
 }
+
+## _convert_intraday_log
+
+# munges data from the goofy fitbit format to the only-slightly-less-goofy
+# list-of-hashrefs format this module uses.
 
 sub _convert_intraday_log {
   my( $data ) = @_;
@@ -341,110 +588,56 @@ sub _convert_intraday_log {
   return @return;
 }
 
+## _fetch_data
+
+# takes a hashref of arguments and uses that info to fetch and return a
+# particular dataset from fitbit.com.
+
+# see _build_fitbit_url() for info on most of the arguments. The only other
+# params of interest are:
+#   - raw_xml -- if true, return the raw unparsed XML
+#   - raw     -- if true, return the whole parsed XML structure
+
+# by default, only the {data}->{chart}->{graphs}->{graph} portion of the XML
+# structure is returned. That generally has all the information of interest.
+
+
+sub _fetch_data {
+  my( $self , $args ) = @_;
+
+  # TODO Add methods for sleep; need to solve day-boundary problem (see python
+  # code)
+
+  my $url = $self->_build_fitbit_url( $args );
+
+  # Note that user agent also uses cookie jar created on initialization
+  my $response = $self->get($url);
+  unless( $response->is_success ) {
+    confess "Couldn't get graph data; reason = HTTP status ($response->{_rc})!";
+  }
+  my $xml = $response->content;
+  # Strip leading whitespace for proper parsing
+  $xml =~ s/^\s+//gm;
+
+  return $xml if $args->{raw_xml};
+
+  my $graph_data;
+  try {
+    $graph_data = XMLin( $xml, KeyAttr => [] , ForceArray => [ 'graph' ] );
+  }
+    catch { confess "$$: XMLin() died: $_\n" };
+
+  return $graph_data if $args->{raw};
+
+  return $graph_data->{data}{chart}{graphs}{graph};
+}
+
+## _get_date
+
+# return today's date in YYYY-MM-DD
 sub _get_date {
   # Default to today's date
   return strftime( "%F", localtime );
 }
 
 1;
-
-__END__
-
-=head1 NAME
-
-WebService::FitBit - OO Perl API used to fetch fitness data from fitbit.com
-
-=head1 SYNOPSIS
-
-Sample Usage:
-
-    use WebService::FitBit;
-
-    my $fb = WebService::FitBit->new(
-        # Available from fitbit profile URL
-        user_id => "XXXNSD",
-        # Populated by cookie
-        sid     => "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-        uid     => "12345",
-        uis     => "XXX%3D"
-    );
-
-    OR
-
-    my $fb = WebService::FitBit->new(config => 'conf/fitbit.conf');
-
-    # No date defaults to today
-    my @log = $fb->get_calories_log();
-    foreach (@log) {
-        print "time = $_->{time} : calories = $_->{value}\n";
-    }
-
-    print "calories = " . $fb->total_calories("2010-05-03") . "\n";
-    print "activescore = " . $fb->total_active_score("2010-05-03") . "\n";
-    print "steps = " . $fb->total_steps("2010-05-03") . "\n";
-
-=head1 DESCRIPTION
-
-
-C<WebService::FitBit> provides an OO API for fetching fitness data from fitbit.com.
-Currently there is no official API, however data is retrieved using XML feeds
-that populate the flash-based charts.
-
-Intraday (5min and 1min intervals) logs are provide for:
-
- - calories burned
- - activity score
- - steps taken
- - sleep activity (every 1 min)
-
-Historical (aggregate) info is provided for:
-
- - calories burned / consumed
- - activity score
- - steps taken
- - distance travels (miles)
- - sleep (total time in hours, and times awoken)
-
-=head1 METHODS
-
-See method comments for detailed API info:
-
-Note that all detailed log methods (get_*) and historical (total_*)
-accept a single data parameter (format = YYYY-MM-DD).  If no date
-is supplied, today's date will be used.
-
-=head1 EXAMPLE CODE
-
-See test_client.pl and dump_csv.pl
-
-=head1 KNOWN_ISSUES
-
-At this time, if you attempt to tally the intraday (5min) logs for
-the total daily number, this number will NOT match the number from
-the total_*_ API call.  This is due to the way that FitBit feeds the
-intraday values via XML to the flash-graph chart.  All numbers are
-whole numbers, and this rounding issue causes the detailed log
-tally to be between 10-100 points higher.
-
-For example:
-
-    # Calling total = 2122
-    print "Total calories burned = " . $fb->total_calories()->{burned} . "\n";
-
-    # Tallying total from log entries = 2157
-    my $total = 0;
-    $total += $_->{value} foreach ( $fb->get_calories_log($date) );
-
-=head1 AUTHOR
-
-Eric Blue <ericblue76@gmail.com> - http://eric-blue.com
-
-=head1 COPYRIGHT
-
-Copyright (c) 2010 Eric Blue. This program is free
-software; you can redistribute it and/or modify it under the same terms
-as Perl itself.
-
-=cut
-
-
