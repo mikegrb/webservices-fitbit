@@ -1,4 +1,5 @@
 package WebService::FitBit;
+# ABSTRACT: OO Perl API used to fetch fitness data from fitbit.com
 use Mouse;
 use 5.010;
 
@@ -16,9 +17,6 @@ use POSIX;
 use Try::Tiny;
 use XML::Simple;
 use YAML            qw/ LoadFile /;
-
-use vars qw( $VERSION );
-$VERSION = '0.1';
 
 has 'base_url' => (
   is      => 'ro' ,
