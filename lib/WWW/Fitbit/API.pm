@@ -12,7 +12,6 @@ use Carp;
 use Data::Dumper;
 use HTTP::Cookies;
 use LWP::UserAgent;
-use Log::Log4perl qw(:easy);
 use POSIX;
 use Try::Tiny;
 use XML::Simple;
@@ -55,19 +54,6 @@ has '_browser' => (
 
 sub _make_browser {
   return LWP::UserAgent->new( agent => "FitBit Perl API/2.0" );
-}
-
-has '_logger' => (
-  is       => 'ro',
-  isa      => 'Log::Log4perl::Logger' ,
-  init_arg => undef ,
-  builder  => '_make_logger' ,
-  handles  => [ 'debug' , 'info' ] ,
-);
-
-sub _make_logger {
-  Log::Log4perl->init("conf/logger.conf");
-  return get_logger();
 }
 
 sub BUILDARGS {
@@ -126,8 +112,6 @@ sub build_fitbit_url {
 
   _check_date_format( $args->{date} );
 
-  $self->info("Building URL for type=$args->{type} & date=$args->{date}");
-
   my %params = (
     userId  => $self->user_id,
     type    => $args->{type}    || 'stepsTaken' ,
@@ -148,18 +132,15 @@ sub fetch_data {
   # code)
 
   my $url = $self->build_fitbit_url( $args );
-  $self->debug("URL = $url");
 
   # Note that user agent also uses cookie jar created on initialization
   my $response = $self->get($url);
   unless( $response->is_success ) {
-    $self->info( "HTTP status = ", Dumper( $response->status_line ) );
     confess "Couldn't get graph data; reason = HTTP status ($response->{_rc})!";
   }
   my $xml = $response->content;
   # Strip leading whitespace for proper parsing
   $xml =~ s/^\s+//gm;
-  $self->debug("XML = $xml");
 
   return $xml if $args->{raw_xml};
 
