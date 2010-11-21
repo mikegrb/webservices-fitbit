@@ -48,13 +48,10 @@ has '_browser' => (
   is       => 'ro' ,
   isa      => 'LWP::UserAgent' ,
   init_arg => '_set_browser',
-  builder  => '_make_browser' ,
+  default  => sub { LWP::UserAgent->new( agent => "FitBit Perl API/2.0" ); } ,
   handles  => [ 'get' , 'cookie_jar' ] ,
 );
 
-sub _make_browser {
-  return LWP::UserAgent->new( agent => "FitBit Perl API/2.0" );
-}
 
 sub BUILDARGS {
   my( $class , $args ) = @_;
