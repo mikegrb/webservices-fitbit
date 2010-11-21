@@ -44,8 +44,8 @@ sub login_to_fitbit {
 
   my( $uid , $sid );
 
-  $ua->cookie_jar->scan( sub { 
-    my( undef, $key , $val ) = @_;
+  $ua->cookie_jar->scan( sub {
+    my( undef , $key , $val ) = @_;
     given( $key ) {
       when( 'sid' ) { $sid = $val }
       when( 'uid' ) { $uid = $val }
