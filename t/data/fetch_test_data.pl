@@ -1,4 +1,5 @@
 #! /opt/perl/bin/perl
+# PODNAME: fetch_test_data
 
 use warnings;
 use strict;
@@ -6,7 +7,7 @@ use 5.010;
 use autodie;
 
 use FindBin;
-use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::RealBin/../../lib";
 
 use WebService::FitBit;
 
@@ -28,7 +29,7 @@ foreach my $type ( qw/
   		       activitiesBreakdown
    		       stepsTaken
 		     / ) {
-  my $file = "$FindBin::Bin/../t/data/$type.xml";
+  my $file = "$FindBin::Bin/$type.xml";
 
   if( -e $file ) {
     say "Skipping $type.xml; file exists.";
@@ -40,9 +41,9 @@ foreach my $type ( qw/
     raw_xml => 1 ,
   });
 
-  open( OUT , '>' , $file );
-  print OUT $xml;
-  close( OUT );
+  open( my $OUT , '>' , $file );
+  print $OUT $xml;
+  close( $OUT );
 
   say "Wrote $file";
 }
