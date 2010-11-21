@@ -58,10 +58,15 @@ sub BUILDARGS {
 
   my $config_file = $args->{config} || "$ENV{HOME}/.fitbit";
 
-  die "Can't find config file!"
-    unless -e $config_file;
+  my $config = {};
 
-  my $config = LoadFile( $config_file );
+  if ( -e $config_file ) {
+    try { $config = LoadFile( $config_file ); }
+    catch {
+      warn "error parsing config file: $_\n";
+      warn "CONFIG FILE IGNORED!\n";
+    };
+  }
 
   %$args = ( %$config , %$args );
   return $args;
