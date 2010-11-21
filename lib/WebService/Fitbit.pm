@@ -1,4 +1,4 @@
-package WWW::Fitbit::API;
+package WebService::FitBit;
 use Mouse;
 use 5.010;
 
@@ -350,15 +350,15 @@ __END__
 
 =head1 NAME
 
-WWW::Fitbit::API - OO Perl API used to fetch fitness data from fitbit.com
+WebService::FitBit - OO Perl API used to fetch fitness data from fitbit.com
 
 =head1 SYNOPSIS
 
 Sample Usage:
 
-    use WWW::Fitbit::API;
+    use WebService::FitBit;
 
-    my $fb = WWW::Fitbit::API->new(
+    my $fb = WebService::FitBit->new(
         # Available from fitbit profile URL
         user_id => "XXXNSD",
         # Populated by cookie
@@ -369,7 +369,7 @@ Sample Usage:
 
     OR
 
-    my $fb = WWW::Fitbit::API->new(config => 'conf/fitbit.conf');
+    my $fb = WebService::FitBit->new(config => 'conf/fitbit.conf');
 
     # No date defaults to today
     my @log = $fb->get_calories_log();
@@ -384,7 +384,7 @@ Sample Usage:
 =head1 DESCRIPTION
 
 
-C<WWW::Fitbit::API> provides an OO API for fetching fitness data from fitbit.com.
+C<WebService::FitBit> provides an OO API for fetching fitness data from fitbit.com.
 Currently there is no official API, however data is retrieved using XML feeds
 that populate the flash-based charts.
 

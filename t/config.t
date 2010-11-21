@@ -2,9 +2,9 @@
 
 use Test::More;
 use Test::Exception;
-use WWW::Fitbit::API;
+use WebService::FitBit;
 
-dies_ok { WWW::Fitbit::API->new({ config => 'does/not/exist' })}
+dies_ok { WebService::FitBit->new({ config => 'does/not/exist' })}
   'new() without config throws exception';
 
 done_testing();

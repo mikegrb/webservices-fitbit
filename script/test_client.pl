@@ -9,9 +9,9 @@ use warnings;
 # Url:          http://eric-blue.com/projects/fitbit
 #
 
-use WWW::Fitbit::API;
+use WebService::FitBit;
 
-my $fb = WWW::Fitbit::API->new( config => 'conf/fitbit.conf' );
+my $fb = WebService::FitBit->new( config => 'conf/fitbit.conf' );
 
 print "Total calories burned = " . $fb->total_calories()->{burned} . "\n";
 print "Total calories consumed = " . $fb->total_calories()->{consumed} . "\n";

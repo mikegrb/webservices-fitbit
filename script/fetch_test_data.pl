@@ -8,9 +8,9 @@ use autodie;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use WWW::Fitbit::API;
+use WebService::FitBit;
 
-my $fb = WWW::Fitbit::API->new();
+my $fb = WebService::FitBit->new();
 
 foreach my $type ( qw/
 		       activeScore

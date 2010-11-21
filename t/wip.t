@@ -1,4 +1,4 @@
-#! env perl
+#! /usr/bin/env perl
 
 use strict;
 use warnings;
@@ -10,7 +10,7 @@ use FindBin;
 use LWP::UserAgent;
 use Test::MockObject::Extends;
 
-use WWW::Fitbit::API;
+use WebService::FitBit;
 
 my $browser = LWP::UserAgent->new();
 my $mock_browser = Test::MockObject::Extends->new( $browser );
@@ -30,8 +30,8 @@ $mock_browser->mock( 'get' , sub {
   return $mock_response;
 });
 
-my $fb = WWW::Fitbit::API->new({ _set_browser => $mock_browser });
-isa_ok( $fb , 'WWW::Fitbit::API' );
+my $fb = WebService::FitBit->new({ _set_browser => $mock_browser });
+isa_ok( $fb , 'WebService::FitBit' );
 
 my $score = $fb->active_score;
 is( $score , '52.0' );

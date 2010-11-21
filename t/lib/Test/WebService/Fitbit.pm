@@ -1,4 +1,4 @@
-package Test::WWW::Fitbit::API;
+package Test::WebService::FitBit;
 use strict;
 use warnings;
 
@@ -11,7 +11,7 @@ use FindBin;
 use LWP::UserAgent;
 use Test::MockObject::Extends;
 
-use WWW::Fitbit::API;
+use WebService::FitBit;
 
 sub setup_fitbit_object :Test(setup) {
   my $test = shift;
@@ -34,13 +34,13 @@ sub setup_fitbit_object :Test(setup) {
     return $mock_response;
   });
 
-  $test->{fb} = WWW::Fitbit::API->new({ _set_browser => $mock_browser });
+  $test->{fb} = WebService::FitBit->new({ _set_browser => $mock_browser });
 }
 
 sub isa_fitbit :Test(1) {
   my $test = shift;
 
-  isa_ok( $test->{fb} , 'WWW::Fitbit::API' );
+  isa_ok( $test->{fb} , 'WebService::FitBit' );
 }
 
 sub active_score :Test(1) {

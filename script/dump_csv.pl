@@ -9,10 +9,10 @@ use warnings;
 # Url:          http://eric-blue.com/projects/fitbit
 #
 
-use WWW::Fitbit::API;
+use WebService::FitBit;
 use POSIX;
 
-my $fb = WWW::Fitbit::API->new( config => 'conf/fitbit.conf' );
+my $fb = WebService::FitBit->new( config => 'conf/fitbit.conf' );
 
 my $day        = 86400;    # 1 day
 my $total_days = 7;
