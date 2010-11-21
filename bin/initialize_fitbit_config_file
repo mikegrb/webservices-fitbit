@@ -1,7 +1,6 @@
 #! /opt/perl/bin/perl
-# PODNAME: init_config
-use strict;
-use warnings;
+# PODNAME: initialize_fitbit_config_file
+use strictures 1;
 use 5.010;
 
 use HTTP::Request::Common qw/ POST /;
