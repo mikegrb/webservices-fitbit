@@ -13,7 +13,6 @@ use 5.010;
 #
 
 use Carp;
-use Data::Dumper;
 use HTTP::Cookies;
 use LWP::UserAgent;
 use POSIX;
