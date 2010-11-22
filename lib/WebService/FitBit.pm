@@ -10,16 +10,14 @@ package WebService::FitBit;
     my $fb = WebService::FitBit->new();
 
     # No date defaults to today
-### FIXME update method names
-    my @log = $fb->get_calories_log();
+    my @log = $fb->intraday_calories_burned();
     foreach (@log) {
-        print "time = $_->{time} : calories = $_->{value}\n";
+        printf "time = %s -> calories = %s\n" , %$_;
     }
 
-### FIXME update method names
-    printf "calories    = %s\n" , $fb->total_calories('2010-05-03');
-    printf "activescore = %s\n" , $fb->total_active_score('2010-05-03');
-    printf "steps       = %s\n" , $fb->total_steps('2010-05-03');
+    printf "calories burned = %s\n" , $fb->calories_burned('2010-05-03');
+    printf "active score    = %s\n" , $fb->active_score('2010-05-03');
+    printf "steps           = %s\n" , $fb->steps_taken('2010-05-03');
 
 =head1 DESCRIPTION
 
@@ -276,7 +274,7 @@ sub distance_from_steps {
   @intraday_active_scores = $fb->intraday_active_score();
   @intraday_active_scores = $fb->intraday_active_score('2010-10-20');
 
-Returns a list of hashrefs, each of the form C<( time => value )>. Times are
+Returns a list of hashrefs, each of the form 'time => value'. Times are
 in five minute intervals, running from '00:00' to '23:55'. Values are the
 activity score for that particular interval of the day.
 
@@ -303,7 +301,7 @@ sub intraday_active_score {
   @intraday_calories_burned = $fb->intraday_calories_burned();
   @intraday_calories_burned = $fb->intraday_calories_burned('2010-10-20');
 
-Returns a list of hashrefs, each of the form C<( time => value )>. Times are
+Returns a list of hashrefs, each of the form 'time => value'. Times are
 in five minute intervals, running from '00:00' to '23:55'. Values are the
 calories burned during that particular interval of the day.
 
