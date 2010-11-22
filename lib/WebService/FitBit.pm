@@ -138,7 +138,7 @@ parameters read from the config.
 sub BUILDARGS {
   my( $class , $args ) = @_;
 
-  my $config_file = $args->{config} || "$ENV{HOME}/.fitbit";
+  my $config_file = $args->{config} // "$ENV{HOME}/.fitbit";
 
   my $config = {};
 
