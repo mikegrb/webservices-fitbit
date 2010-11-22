@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 # PODNAME: dump_fitbit_data_to_csv
-
+# ABSTRACT: dump the last week's worth of FitBit data to a CSV file.
 use strictures 1;
 use strict;
 

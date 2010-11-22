@@ -1,5 +1,6 @@
 #! /opt/perl/bin/perl
 # PODNAME: initialize_fitbit_config_file
+# ABSTRACT: generate a ~/.fitbit config for use by WebService::FitBit
 use strictures 1;
 use 5.010;
 
