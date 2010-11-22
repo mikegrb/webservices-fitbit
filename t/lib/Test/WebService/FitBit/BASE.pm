@@ -1,7 +1,5 @@
-package Test::WebService::FitBit;
-use strict;
-use warnings;
-
+package Test::WebService::FitBit::BASE;
+use strictures 1;
 use base qw/ Test::Class /;
 
 use Test::More;
@@ -35,24 +33,6 @@ sub setup_fitbit_object :Test(setup) {
   });
 
   $test->{fb} = WebService::FitBit->new({ _set_browser => $mock_browser });
-}
-
-sub isa_fitbit :Test(1) {
-  my $test = shift;
-
-  isa_ok( $test->{fb} , 'WebService::FitBit' );
-}
-
-sub active_score :Test(1) {
-  my $test = shift;
-
-  is( $test->{fb}->active_score , '52.0' );
-}
-
-sub weight :Test(1) {
-  my $test = shift;
-
-  is( $test->{fb}->weight , '195.6' );
 }
 
 1;
