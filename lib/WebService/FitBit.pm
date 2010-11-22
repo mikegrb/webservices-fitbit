@@ -238,8 +238,8 @@ sub activities_breakdown {
 
 =method calories_burned
 
-    $calories_burned = $self->calories_burned();
-    $calories_burned = $self->calories_burned('2010-10-20');
+    $calories_burned = $fb->calories_burned();
+    $calories_burned = $fb->calories_burned('2010-10-20');
 
 Returns the number of calories burned on the given date. Defaults to the
 current date if none given.
@@ -253,8 +253,8 @@ sub calories_burned {
 
 =method calories_consumed
 
-    $calories_consumed = $self->calories_consumed();
-    $calories_consumed = $self->calories_consumed('2010-10-20');
+    $calories_consumed = $fb->calories_consumed();
+    $calories_consumed = $fb->calories_consumed('2010-10-20');
 
 Returns the number of calories consumed on the given date. Defaults to the
 current date if none given.
