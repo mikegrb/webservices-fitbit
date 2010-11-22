@@ -3,10 +3,10 @@
 use Test::More;
 
 BEGIN {
-  use_ok 'WWW::Fitbit::API'
+  use_ok 'WebService::FitBit'
     or BAIL_OUT( "main module can't compile?!" )
 }
 
-diag "Testing WWW::Fitbit::API version $WWW::Fitbit::API::VERSION";
+diag "Testing WebService::FitBit version $WebService::FitBit::VERSION";
 
 done_testing(1);

@@ -1,1 +1,3 @@
-log
+.build
+WebService-FitBit-*
+!releases/*.tar.gz
