@@ -222,6 +222,36 @@ sub activities_breakdown {
   };
 }
 
+=method calories_burned
+
+    $calories_burned = $self->calories_burned();
+    $calories_burned = $self->calories_burned('2010-10-20');
+
+Returns the number of calories burned on the given date. Defaults to the
+current date if none given.
+
+=cut
+
+sub calories_burned {
+  my( $self , $date ) = @_;
+  return $self->calories_in_out($date)->{burned};
+}
+
+=method calories_consumed
+
+    $calories_consumed = $self->calories_consumed();
+    $calories_consumed = $self->calories_consumed('2010-10-20');
+
+Returns the number of calories consumed on the given date. Defaults to the
+current date if none given.
+
+=cut
+
+sub calories_consumed {
+  my( $self , $date ) = @_;
+  return $self->calories_in_out($date)->{consumed};
+}
+
 =method calories_in_out
 
     $calories_in_out_hashref = $fb->calories_in_out();
