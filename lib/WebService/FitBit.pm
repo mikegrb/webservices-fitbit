@@ -180,13 +180,12 @@ given.
 =cut
 
 sub active_score {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'activeScore',
-    %$args ,
-  });
+  my $args = { type => 'activeScore' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return $data->[0]{value}{content};
 }
@@ -207,19 +206,16 @@ the hashref would have a value of '50'.
 =cut
 
 sub activities_breakdown {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
   # ask for raw so we can get the data out of a different
   # part of the returned data structure...
-  my $data = $self->_fetch_data({
-    type => 'activitiesBreakdown' ,
-    raw  => 1 ,
-    %$args ,
-  });
+  my $args = { type => 'activitiesBreakdown' , raw => 1 };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   $data = $data->{data}{pie}{slice};
-
   return {
     sedentary => $data->[0]{content} ,
     lightly   => $data->[1]{content} ,
@@ -240,13 +236,12 @@ under the 'consumed' key.
 =cut
 
 sub calories_in_out {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'caloriesInOut' ,
-    %$args ,
-  });
+  my $args = { type => 'caloriesInOut' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return {
     burned   => $data->[0]{value}{content} ,
@@ -266,13 +261,12 @@ current date, if none given.
 =cut
 
 sub distance_from_steps {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'distanceFromSteps' ,
-    %$args ,
-  });
+  my $args = { type => 'distanceFromSteps' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return $data->[0]{value}{content};
 }
@@ -294,13 +288,12 @@ Takes a date argument; defaults to the current date if none is given.
 =cut
 
 sub intraday_active_score {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'intradayActiveScore' ,
-    %$args ,
-  });
+  my $args = { type => 'intradayActiveScore' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return _convert_intraday_log( $data );
 }
@@ -322,13 +315,12 @@ Takes a date argument; defaults to the current date if none is given.
 =cut
 
 sub intraday_calories_burned {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'intradayCaloriesBurned' ,
-    %$args ,
-  });
+  my $args = { type => 'intradayCaloriesBurned' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args);
 
   return _convert_intraday_log( $data );
 }
@@ -340,15 +332,14 @@ NOT YET IMPLEMENTED. Patches welcomed.
 =cut
 
 sub intraday_sleep {
-  my( $self , $args ) = @_;
-  $args //= {};
+  die "NOT YET IMPLEMENTED";
 
-  my $data = $self->_fetch_data({
-    type => 'intradaySleep' ,
-    raw => 1 ,
-    %$args ,
-  });
-  die "NOT DONE YET"
+  my( $self , $date ) = @_;
+
+  my $args = { type => 'intradaySleep' , raw => 1  };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 }
 
 =method intraday_steps
@@ -368,13 +359,12 @@ Takes a date argument; defaults to the current date if none is given.
 =cut
 
 sub intraday_steps {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'intradaySteps' ,
-    %$args ,
-  });
+  my $args = { type => 'intradaySteps' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return _convert_intraday_log( $data );
 }
@@ -394,13 +384,12 @@ of '0.50', that indicates that 30 minutes were spent in that activity level.
 =cut
 
 sub minutes_active {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'minutesActive' ,
-    %$args ,
-  });
+  my $args = { type => 'minutesActive' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return {
     lightly => $data->[0]{value}{content},
@@ -420,13 +409,12 @@ date if none given.
 =cut
 
 sub steps_taken {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'stepsTaken' ,
-    %$args ,
-  });
+  my $args = { type => 'stepsTaken' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return $data->[0]{value}{content};
 }
@@ -448,13 +436,12 @@ or just the value from the first or the value from the longest.
 =cut
 
 sub time_asleep {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'timeAsleep' ,
-    %$args ,
-  });
+  my $args = { type => 'timeAsleep' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return $data->[0]{value}{content} ,
 }
@@ -473,13 +460,12 @@ or just the value from the first or the value from the longest.
 =cut
 
 sub times_woken_up {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'timesWokenUp' ,
-    %$args ,
-  });
+  my $args = { type => 'timesWokenUp' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return $data->[0]{value}{content},
 }
@@ -498,13 +484,12 @@ retrieve only the data that was explictly entered.
 =cut
 
 sub weight {
-  my( $self , $args ) = @_;
-  $args //= {};
+  my( $self , $date ) = @_;
 
-  my $data = $self->_fetch_data({
-    type => 'weight' ,
-    %$args ,
-  });
+  my $args = { type => 'weight' };
+  $args->{date} = $date if $date;
+
+  my $data = $self->_fetch_data( $args );
 
   return $data->[0]{value}[0]{content};
 }
@@ -529,7 +514,7 @@ sub _build_fitbit_url {
 
   $args->{date} //= _get_date();
 
-  _check_date_format( $args->{date} );
+  $self->_check_date_format( $args->{date} );
 
   my %params = (
     userId  => $self->user_id,
@@ -552,7 +537,7 @@ sub _build_fitbit_url {
 # those slots -- '0000-99-99' is an acceptable date by this algorithm.
 
 sub _check_date_format {
-  my( $date ) = @_;
+  my( $self , $date ) = @_;
 
   # Very basic regex to check date format
   if ( $date !~ /^(\d{4})-(\d{2})-(\d{2})$/ ) {
@@ -635,9 +620,8 @@ sub _fetch_data {
 ## _get_date
 
 # return today's date in YYYY-MM-DD
-sub _get_date {
-  # Default to today's date
-  return strftime( "%F", localtime );
-}
+
+sub _get_date { return strftime( "%F", localtime ) }
+
 
 1;
