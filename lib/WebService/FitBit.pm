@@ -101,6 +101,7 @@ use strict;
 use 5.010;
 
 use Carp;
+use File::HomeDir;
 use HTTP::Cookies;
 use LWP::UserAgent;
 use POSIX;
@@ -151,7 +152,8 @@ has '_browser' => (
     });
 
 Returns a WebService::FitBit object. Generally you'll want to use the default
-form, which pulls required parameters out of $ENV{HOME}/.fitbit. There is a
+form, which pulls required parameters out of a file called '.fitbit' in your
+home directory (using the value obtained from C<File::HomeDir>). There is a
 helper command included in the dist -- C<initialize_fitbit_config_file> --
 which will prompt for an account name and password and then use those to
 retrieve the required values from L<http://fitbit.com>
@@ -170,7 +172,7 @@ parameters read from the config.
 sub BUILDARGS {
   my( $class , $args ) = @_;
 
-  my $config_file = $args->{config} // "$ENV{HOME}/.fitbit";
+  my $config_file = $args->{config} // File::HomeDir->my_home . '/.fitbit';
 
   my $config = {};
 

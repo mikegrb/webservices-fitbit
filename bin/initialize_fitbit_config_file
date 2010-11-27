@@ -4,6 +4,7 @@
 use strictures 1;
 use 5.010;
 
+use File::HomeDir;
 use HTTP::Request::Common qw/ POST /;
 use LWP::UserAgent;
 use Term::ReadKey;
@@ -23,7 +24,7 @@ my %config = (
   user_id => $user_id ,
 );
 
-my $config_file = "$ENV{HOME}/.fitbit";
+my $config_file = File::HomeDir->my_home . '/.fitbit';
 
 DumpFile( $config_file , \%config );
 chmod 0400 , $config_file;
